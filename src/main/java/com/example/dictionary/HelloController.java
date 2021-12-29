@@ -2,15 +2,19 @@ package com.example.dictionary;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Label;
-import javafx.scene.control.TableView;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -29,24 +33,6 @@ import javafx.stage.Stage;
 
 public class HelloController extends Application {
 
-    @Override
-    public void start(Stage stage) throws IOException {
-        FXMLLoader fxmlLoader = new FXMLLoader(HelloApplication.class.getResource("hello-view.fxml"));
-        Scene scene = new Scene(fxmlLoader.load(), 814, 419);
-        stage.setResizable(false);
-        stage.setTitle("Hello!");
-        stage.setScene(scene);
-        stage.show();
-        ClientSocket.getInstance();
-
-    }
-
-
-    public static void main(String[] args) throws IOException {
-
-        launch(args);
-    }
-
     @FXML
     private Label welcomeText;
 
@@ -54,141 +40,127 @@ public class HelloController extends Application {
     private TextField search_text_box;
 
     @FXML
+    private Text search_result_word;
+
+    @FXML
+    private Text word_def;
+
+    @FXML
     private TextField add_word;
 
     @FXML
     private TextArea add_word_def;
 
-    @FXML
-    private TableView search_result_table;
+    @Override
+    public void start(Stage stage) throws IOException {
+        try {
+            ClientSocket.getInstance();
+            FXMLLoader fxmlLoader = new FXMLLoader(HelloApplication.class.getResource("hello-view.fxml"));
+            Scene scene = new Scene(fxmlLoader.load(), 814, 370);
+            stage.setResizable(false);
+            stage.setTitle("My Dictionary client");
+            stage.setScene(scene);
+            stage.show();
+        }catch (Exception e) {
+            showDialog("Unable to open connection");
+        }
+    }
 
-    @FXML
-    private TableView all_words_table;
-
-    @FXML
-    private Text add_message_text_view;
+    public static void main(String[] args) throws IOException {
+        launch(args);
+    }
 
     public void onSearchBtnClicked(ActionEvent actionEvent) {
         new Thread(
-                new Runnable() {
-                    @Override
-                    public void run() {
+                () -> {
+                    try {
                         Response response = ClientSocket.getInstance().searchWord(search_text_box.getText());
                         if (response.failureMessage.equals("")) {
-                            System.out.println(response.word.definitions);
+                            Platform.runLater(() -> {
+                                search_result_word.setText(response.word.text);
+                                String def = "";
+                                for (String d : response.word.definitions) {
+                                    def += d + ", ";
+                                }
+                                word_def.setText(def);
+                            });
                         } else {
-                            System.out.println("response.failureMessage");
+                            Platform.runLater(() -> {
+                                showDialog(response.failureMessage);
+                            });
                         }
-                        Platform.runLater(() -> {
-                            add_message_text_view.setText("this hoasdh ajfn kajsdh akjsdh kasjdh khaj");
-                        });
-                        System.out.println("Done");
+                    } catch (Exception e) {
+                        showDialog("accessing server with a close connection");
                     }
+
                 }
         ).start();
     }
 
     @Override
     public void stop() throws Exception {
-        ClientSocket.getInstance().close();
+        try {
+            ClientSocket.getInstance().close();
+        } catch (Exception e) {
+            showDialog("unable to close connection that is not opened");
+        }
     }
 
     public void onAddWordBtnClicked(ActionEvent actionEvent) {
-        System.out.println(add_word.getText());
-        System.out.println(add_word_def.getText());
-
         new Thread(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        Response response = ClientSocket.getInstance().addWord(new Word(add_word.getText(), new ArrayList<>(Arrays.asList(add_word_def.getText()))));
+                () -> {
+                    try {
+                        var a = add_word_def.getText().split("[\\r\\n]+");
+                        Response response = ClientSocket.getInstance().addWord(new Word(add_word.getText(), new ArrayList<>(Arrays.asList(a))));
                         if (response.failureMessage.equals("")) {
-                            System.out.println(response.word.definitions);
+                            Platform.runLater(() -> {
+                                showDialog("Successfully added a word to dictionary");
+                            });
                         } else {
-                            System.out.println(response.failureMessage);
+                            Platform.runLater(() -> {
+                                showDialog(response.failureMessage);
+                            });
                         }
-                        Platform.runLater(() -> {
-                            add_message_text_view.setText("this hoasdh ajfn kajsdh akjsdh kasjdh khaj");
-                        });
+                    } catch (Exception e) {
+                        showDialog("accessing server with a close connection");
+                    }
+
+                }
+        ).start();
+    }
+
+    public void onWordDelete(ActionEvent actionEvent) {
+        new Thread(
+                () -> {
+                    try {
+                        Response response = ClientSocket.getInstance().deleteWord(new Word(add_word.getText()));
+                        if (response.failureMessage.equals("")) {
+                            Platform.runLater(() -> {
+                                showDialog("Successfully Deleted a word from dictionary");
+                            });
+                        } else {
+                            Platform.runLater(() -> {
+                                showDialog(response.failureMessage);
+                            });
+                        }
+                    } catch (Exception e) {
+                       showDialog("accessing server with a close connection");
                     }
                 }
         ).start();
     }
-}
 
-class ClientSocket {
-
-    InetAddress ip;
-    ObjectOutputStream oos;
-    ObjectInputStream ois;
-    Scanner scn;
-
-    private static ClientSocket client_instance = null;
-
-    public static ClientSocket getInstance() {
-        if (client_instance == null) {
-            client_instance = new ClientSocket();
-        }
-        return client_instance;
+    public void showDialog(String message) {
+        Stage dialogStage = new Stage();
+        dialogStage.initModality(Modality.WINDOW_MODAL);
+        dialogStage.setTitle("DSP project");
+        dialogStage.setHeight(200);
+        dialogStage.setWidth(300);
+        VBox vbox = new VBox(new Text(message));
+        vbox.setAlignment(Pos.CENTER);
+        vbox.setPadding(new Insets(15));
+        dialogStage.setScene(new Scene(vbox));
+        dialogStage.show();
     }
 
-    public void setupSocket() {
-        try {
-            scn = new Scanner(System.in);
-            // getting localhost ip
-            ip = InetAddress.getByName("localhost");
-            // establish the connection with server port 5056
-            Socket s = new Socket(ip, 5056);
-            // obtaining input and out streams
-            this.oos = new ObjectOutputStream(s.getOutputStream());
-            this.ois = new ObjectInputStream(s.getInputStream());
-            System.out.println("SEtup completed");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    ClientSocket() {
-        setupSocket();
-    }
-
-    public Response searchWord(String word) {
-        try {
-            System.out.println("Search - word from clientsocket");
-            this.oos.writeObject(new Request(new Word(word, new ArrayList<>()), RequestType.GET));
-            Response response = (Response) this.ois.readObject();
-            return response;
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-        return new Response("Connection Error!");
-    }
-
-    public Response addWord(Word word) {
-        System.out.println("Search - add word from clientsocket");
-
-        try {
-            this.oos.writeObject(new Request(word, RequestType.ADD));
-            Response response = (Response) this.ois.readObject();
-            return response;
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-        return new Response("Connection Error!");
-    }
-
-    public void close() {
-        try {
-            scn.close();
-            oos.close();
-            ois.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
 }
